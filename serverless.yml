@@ -1,0 +1,222 @@
+service: distributed-patterns-demo
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  environment:
+    ORDERS_TABLE: ${self:service}-orders-table-${sls:stage}
+    OUTBOX_TABKLET: ${self:service}-outbox-table-${sls:stage}
+    EVENT_BUS_NAME: ${self:service}-event-bus-${sls:stage}
+    IDEMPOTENCY_TABLE: ${self:service}-idempotency-table-${sls:stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-orders-table-${sls:stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-outbox-table-${sls:stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-idempotency-table-${sls:stage}
+        - Effect: Allow
+          Action:
+            - events:PutEvents
+          Resource:
+            - arn:aws:events:${self:provider.region}:*:event-bus/${self:service}-event-bus-${sls:stage}
+        - Effect: Allow
+          Action:
+            - events: StartExecution
+          Resource:
+            - arn:aws:states:${self:provider.region}:*:stateMachine:${self:service}-order-saga-${sls:stage}
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-steps-functions
+
+functions:
+  createOrder:
+    handler: src/functions/createOrder.handler
+    events:
+      - http:
+          paht: orders
+          method: post
+
+  outboxProcessor:
+    handler: src/functions/outboxProcessor.handler
+    events:
+      - stream:
+          type: dynamodb
+          arn: !GetAtt OrdersTable.StreamArn
+
+  reserveInventory:
+    handler: src/functions/reserveInventory.handler
+
+  processPayment:
+    handler: src/functions/saga/process-payment.handler
+
+  sendNotification:
+    handler: src/functions/saga/send-notification.handler
+
+  compensate:
+    handler: src/functions/saga/compensate.handler
+
+stepFunctions:
+  stateMachines:
+    orderSaga:
+      name: ${self:service}-order-saga-${sls:stage}
+      type: EXPRESS
+      loggingConfig:
+        level: ALL
+        includeExecutionData: true
+        destinations:
+          - Fn::GetAtt: [OrderSagaLogGroup, Arn]
+      definition:
+        Comment: "Order Processing Saga - Reserve Inventory -> Process Payment -> Send Notification"
+        StartAt: ReserveInventory
+        States:
+          ReserveInventory:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [reserveInventory, Arn]
+            Retry:
+              - ErrorEquals:
+                  - States.TaskFailed
+                  - States.Timeout
+                IntervalSeconds: 2
+                MaxAttempts: 3
+                BackoffRate: 2
+            Catch:
+              - ErrorEquals:
+                  - States.ALL
+                ResultPath: $.error
+                Next: SagaFailed
+            ResultPath: $.reservationResult
+            Next: ProcessPayment
+
+          ProcessPayment:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [processPayment, Arn]
+            Retry:
+              - ErrorEquals:
+                  - States.TaskFailed
+                  - States.Timeout
+                IntervalSeconds: 2
+                MaxAttempts: 3
+                BackoffRate: 2
+            Catch:
+              - ErrorEquals:
+                  - States.ALL
+                ResultPath: $.error
+                Next: CompensateInventory
+            ResultPath: $.paymentResult
+            Next: SendNotification
+
+          SendNotification:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sendNotification, Arn]
+            Retry:
+              - ErrorEquals:
+                  - States.TaskFailed
+                IntervalSeconds: 1
+                MaxAttempts: 2
+            Catch:
+              - ErrorEquals:
+                  - States.ALL
+                ResultPath: $.error
+                Next: SagaCompleted
+            ResultPath: $.notificationResult
+            Next: SagaCompleted
+
+          CompensateInventory:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [compensate, Arn]
+            InputPath: $
+            ResultPath: $.compensationResult
+            Next: SagaFailed
+
+          SagaCompleted:
+            Type: Succeed
+
+          SagaFailed:
+            Type: Fail
+            Error: SagaExecutionFailed
+            Cause: One or more saga steps failed
+
+resources:
+  Resources:
+    OrdersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.ORDERS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: orderId
+            AttributeType: S
+          - AttributeName: customerId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: orderId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CustomerIndex
+            KeySchema:
+              - AttributeName: customerId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    OutboxTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.OUTBOX_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: eventId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: eventId
+            KeyType: HASH
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+        GlobalSecondaryIndexes:
+          - IndexName: CreatedAtIndex
+            KeySchema:
+              - AttributeName: createdAt
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    IdempotencyTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.IDEMPOTENCY_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: idempotencyKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: idempotencyKey
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    EventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: ${self:provider.environment.EVENT_BUS_NAME}
+
+    OrderSagaLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/vendedlogs/states/${self:service}-order-saga-${sls:stage}
+        RetentionInDays: 7

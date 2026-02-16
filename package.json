@@ -1,0 +1,29 @@
+{
+  "name": "serverless-distributed-patterns",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.160",
+    "@types/node": "^25.2.3",
+    "serverless": "^3.40.0",
+    "serverless-plugin-typescript": "^2.1.5",
+    "serverless-step-functions": "^3.23.4"
+  },
+  "dependencies": {
+    "@aws-lambda-powertools/idempotency": "^2.31.0",
+    "@aws-lambda-powertools/logger": "^2.31.0",
+    "@aws-sdk/client-dynamodb": "^3.987.0",
+    "@aws-sdk/client-eventbridge": "^3.987.0",
+    "@aws-sdk/client-sfn": "^3.990.0",
+    "@aws-sdk/lib-dynamodb": "^3.987.0",
+    "@aws-sdk/util-dynamodb": "^3.990.0",
+    "uuid": "^13.0.0"
+  }
+}
