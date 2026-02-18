@@ -31,3 +31,21 @@ export interface OutboxEvent {
   createdAt: string;
   processed: boolean;
 }
+
+export interface ProcessPaymentInput {
+  orderId: string;
+  customeId: string;
+  totalAmount: number;
+  reservationResult: {
+    reservationId: string;
+    status: string;
+  };
+}
+
+export interface ProcessPaymentOutput {
+  orderId: string;
+  paymentId: string;
+  amount: number;
+  status: string;
+  timestamp: string;
+}

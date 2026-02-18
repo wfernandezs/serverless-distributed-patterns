@@ -6,9 +6,9 @@ provider:
   region: us-east-1
   environment:
     ORDERS_TABLE: ${self:service}-orders-table-${sls:stage}
-    OUTBOX_TABKLET: ${self:service}-outbox-table-${sls:stage}
+    OUTBOX_TABLE: ${self:service}-outbox-table-${sls:stage}
     EVENT_BUS_NAME: ${self:service}-event-bus-${sls:stage}
-    IDEMPOTENCY_TABLE: ${self:service}-idempotency-table-${sls:stage}
+    IDEMPOTENCY_TABLE: ${self:service}-idempotency-v2-${sls:stage}
   iam:
     role:
       statements:
@@ -17,11 +17,12 @@ provider:
             - dynamodb:PutItem
             - dynamodb:GetItem
             - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
             - dynamodb:Query
           Resource:
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-orders-table-${sls:stage}
             - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-outbox-table-${sls:stage}
-            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-idempotency-table-${sls:stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-idempotency-v2-${sls:stage}
         - Effect: Allow
           Action:
             - events:PutEvents
@@ -29,53 +30,73 @@ provider:
             - arn:aws:events:${self:provider.region}:*:event-bus/${self:service}-event-bus-${sls:stage}
         - Effect: Allow
           Action:
-            - events: StartExecution
+            - states:StartExecution
           Resource:
-            - arn:aws:states:${self:provider.region}:*:stateMachine:${self:service}-order-saga-${sls:stage}
+            - arn:aws:states:${self:provider.region}:*:stateMachine:${self:service}-order-workflow-${sls:stage}
 
 plugins:
   - serverless-plugin-typescript
-  - serverless-steps-functions
+  - serverless-step-functions
+
+package:
+  individually: true
+  patterns:
+    - '!.git/**'
+    - '!.gitignore'
+    - '!.vscode/**'
+    - '!.idea/**'
+    - '!README.md'
+    - '!.build/**'
+    - '!pnpm-lock.yaml'
+    - '!package-lock.json'
+    - '!tsconfig.json'
+    - '!**/*.md'
+    - '!**/*.map'
+    - '!**/test/**'
+    - '!**/tests/**'
 
 functions:
   createOrder:
-    handler: src/functions/createOrder.handler
+    handler: src/functions/order-service/handler.create
     events:
       - http:
-          paht: orders
+          path: orders
           method: post
 
   outboxProcessor:
-    handler: src/functions/outboxProcessor.handler
+    handler: src/functions/outbox-processor/handler.processor
+    environment:
+      STATE_MACHINE_ARN: !Ref OrderWorkflowStateMachine
     events:
       - stream:
           type: dynamodb
-          arn: !GetAtt OrdersTable.StreamArn
+          arn: !GetAtt OutboxTable.StreamArn
 
   reserveInventory:
-    handler: src/functions/reserveInventory.handler
+    handler: src/functions/workflow/reserve-inventory.handler
 
   processPayment:
-    handler: src/functions/saga/process-payment.handler
+    handler: src/functions/workflow/process-payment.handler
 
   sendNotification:
-    handler: src/functions/saga/send-notification.handler
+    handler: src/functions/workflow/send-notification.handler
 
   compensate:
-    handler: src/functions/saga/compensate.handler
+    handler: src/functions/workflow/compensate.handler
 
 stepFunctions:
   stateMachines:
-    orderSaga:
-      name: ${self:service}-order-saga-${sls:stage}
+    orderWorkflow:
+      id: OrderWorkflowStateMachine
+      name: ${self:service}-order-workflow-${sls:stage}
       type: EXPRESS
       loggingConfig:
         level: ALL
         includeExecutionData: true
         destinations:
-          - Fn::GetAtt: [OrderSagaLogGroup, Arn]
+          - Fn::GetAtt: [OrderWorkflowLogGroup, Arn]
       definition:
-        Comment: "Order Processing Saga - Reserve Inventory -> Process Payment -> Send Notification"
+        Comment: "Order Processing Workflow - Reserve Inventory -> Process Payment -> Send Notification"
         StartAt: ReserveInventory
         States:
           ReserveInventory:
@@ -93,7 +114,7 @@ stepFunctions:
               - ErrorEquals:
                   - States.ALL
                 ResultPath: $.error
-                Next: SagaFailed
+                Next: WorkflowFailed
             ResultPath: $.reservationResult
             Next: ProcessPayment
 
@@ -129,9 +150,9 @@ stepFunctions:
               - ErrorEquals:
                   - States.ALL
                 ResultPath: $.error
-                Next: SagaCompleted
+                Next: WorkflowCompleted
             ResultPath: $.notificationResult
-            Next: SagaCompleted
+            Next: WorkflowCompleted
 
           CompensateInventory:
             Type: Task
@@ -139,15 +160,15 @@ stepFunctions:
               Fn::GetAtt: [compensate, Arn]
             InputPath: $
             ResultPath: $.compensationResult
-            Next: SagaFailed
+            Next: WorkflowFailed
 
-          SagaCompleted:
+          WorkflowCompleted:
             Type: Succeed
 
-          SagaFailed:
+          WorkflowFailed:
             Type: Fail
-            Error: SagaExecutionFailed
-            Cause: One or more saga steps failed
+            Error: WorkflowExecutionFailed
+            Cause: One or more workflow steps failed
 
 resources:
   Resources:
@@ -201,13 +222,13 @@ resources:
         TableName: ${self:provider.environment.IDEMPOTENCY_TABLE}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: idempotencyKey
+          - AttributeName: id
             AttributeType: S
         KeySchema:
-          - AttributeName: idempotencyKey
+          - AttributeName: id
             KeyType: HASH
         TimeToLiveSpecification:
-          AttributeName: ttl
+          AttributeName: expiration
           Enabled: true
 
     EventBus:
@@ -215,8 +236,8 @@ resources:
       Properties:
         Name: ${self:provider.environment.EVENT_BUS_NAME}
 
-    OrderSagaLogGroup:
+    OrderWorkflowLogGroup:
       Type: AWS::Logs::LogGroup
       Properties:
-        LogGroupName: /aws/vendedlogs/states/${self:service}-order-saga-${sls:stage}
+        LogGroupName: /aws/vendedlogs/states/${self:service}-order-workflow-${sls:stage}
         RetentionInDays: 7

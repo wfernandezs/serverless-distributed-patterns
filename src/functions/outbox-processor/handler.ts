@@ -1,34 +1,33 @@
 import { DynamoDBStreamHandler } from "aws-lambda";
 import { OutboxEvent } from "../../utils/types/order";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import { AttributeValue, DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { AttributeValue } from "@aws-sdk/client-dynamodb";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { SFNClient } from "@aws-sdk/client-sfn";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
+import { docClient } from "../../utils/db";
 
 const logger = new Logger({ serviceName: "OutboxProcessor" });
-
-const dynamoClient = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const sfnClient = new SFNClient({});
 
 const OUTBOX_TABLE = process.env.OUTBOX_TABLE!;
-const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME!;
+const STATE_MACHINE_ARN = process.env.STATE_MACHINE_ARN!;
 
 export const processor: DynamoDBStreamHandler = async (event) => {
-  console.log("Processing outbox events:", JSON.stringify(event, null, 2));
+  logger.info("Processing outbox events:", JSON.stringify(event, null, 2));
 
   const result = await Promise.allSettled(
     event.Records.map(async (record) => {
       try {
         if (record.eventName !== "INSERT") {
-          console.log("Skipping non-insert event:", record.eventName);
+          logger.info("Skipping non-insert event", {
+            eventName: record.eventName,
+          });
           return;
         }
 
         if (!record.dynamodb?.NewImage) {
-          console.warn("No NewImage found in record:", record);
+          logger.warn("No NewImage found in record", { record });
           return;
         }
 
@@ -49,23 +48,15 @@ export const processor: DynamoDBStreamHandler = async (event) => {
           return;
         }
 
-        await eventBrigdgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: "myapp.orders",
-                DetailType: outBoxEvent.eventType,
-                Detail: JSON.stringify(outBoxEvent.payload),
-                EventBusName: EVENT_BUS_NAME,
-              },
-            ],
+        const exeuctionName = `${outBoxEvent.aggregateId}-${Date.now()}`;
+
+        await sfnClient.send(
+          new StartExecutionCommand({
+            stateMachineArn: STATE_MACHINE_ARN,
+            name: exeuctionName,
+            input: JSON.stringify(outBoxEvent.payload),
           }),
         );
-
-        logger.info("Event sent to EventBridge", {
-          eventId: outBoxEvent.eventId,
-          eventType: outBoxEvent.eventType,
-        });
 
         await docClient.send(
           new UpdateCommand({

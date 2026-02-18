@@ -151,3 +151,15 @@ dist/
 build/
 
 # End of https://www.toptal.com/developers/gitignore/api/node,serverless
+
+# Build
+.build/
+
+# VS Code
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+docs/
