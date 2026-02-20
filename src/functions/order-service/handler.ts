@@ -4,7 +4,7 @@ import { v4 as uuidbv4 } from "uuid";
 import { Order, OrderStatus, OutboxEvent } from "../../utils/types/order";
 import { EventType } from "../../utils/types/events";
 import { makeIdempotentHandler } from "../../shared/idempotent-handler";
-import { docClient } from "../../utils/db";
+import { docClient } from "../../utils/db/dynamo";
 import { Logger } from "@aws-lambda-powertools/logger";
 
 const logger = new Logger({ serviceName: "order-service" });

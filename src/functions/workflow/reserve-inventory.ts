@@ -6,7 +6,7 @@ import {
 } from "../../utils/types/reservation";
 import { OrderStatus } from "../../utils/types/order";
 import { v4 as uuidbv4 } from "uuid";
-import { updateOrderStatus } from "../../utils/db";
+import { updateOrderStatus } from "../../utils/db/dynamo";
 
 const logger = new Logger({ serviceName: "reserve-inventory" });
 

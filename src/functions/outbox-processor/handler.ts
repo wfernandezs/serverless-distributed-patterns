@@ -5,7 +5,7 @@ import { AttributeValue } from "@aws-sdk/client-dynamodb";
 import { Logger } from "@aws-lambda-powertools/logger";
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
-import { docClient } from "../../utils/db";
+import { docClient } from "../../utils/db/dynamo";
 
 const logger = new Logger({ serviceName: "OutboxProcessor" });
 const sfnClient = new SFNClient({});

@@ -1,9 +1,9 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { OrderStatus } from './types/order';
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { Logger } from "@aws-lambda-powertools/logger";
+import { OrderStatus } from "../types/order";
 
-const logger = new Logger({ serviceName: 'db-utils' });
+const logger = new Logger({ serviceName: "db-utils" });
 
 /**
  * Singleton DynamoDB client instance
@@ -33,16 +33,16 @@ export async function updateOrderStatus(
     new UpdateCommand({
       TableName: ORDERS_TABLE,
       Key: { orderId },
-      UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+      UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
       ExpressionAttributeNames: {
-        '#status': 'status',
+        "#status": "status",
       },
       ExpressionAttributeValues: {
-        ':status': status,
-        ':updatedAt': new Date().toISOString(),
+        ":status": status,
+        ":updatedAt": new Date().toISOString(),
       },
     }),
   );
 
-  logger.info('Order status updated', { orderId, status });
+  logger.info("Order status updated", { orderId, status });
 }

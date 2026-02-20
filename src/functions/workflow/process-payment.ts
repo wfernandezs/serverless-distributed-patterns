@@ -6,7 +6,7 @@ import {
   ProcessPaymentInput,
   ProcessPaymentOutput,
 } from "../../utils/types/order";
-import { updateOrderStatus } from "../../utils/db";
+import { updateOrderStatus } from "../../utils/db/dynamo";
 
 const logger = new Logger({ serviceName: "process-payment" });
 

@@ -5,7 +5,7 @@ import {
   SendNotificationOutput,
 } from "../../utils/types/notifications";
 import { OrderStatus } from "../../utils/types/order";
-import { updateOrderStatus } from "../../utils/db";
+import { updateOrderStatus } from "../../utils/db/dynamo";
 
 const logger = new Logger({ serviceName: "send-notification" });
 
