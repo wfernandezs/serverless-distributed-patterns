@@ -16,11 +16,13 @@ export const handler: Handler<
   ReserveInventoryInput,
   ReserveInventoryOutput
 > = async (input) => {
-  // Add trace context for distributed tracing
+  // Add trace context
+  const parentTraceId = (input as any)._traceContext?.traceId;
   addTraceContext(
     tracer,
     { orderId: input.orderId, customerId: input.customerId },
     { itemCount: input.items.length, step: "reserve-inventory" },
+    parentTraceId,
   );
 
   logger.info("Reserving inventory for order", {

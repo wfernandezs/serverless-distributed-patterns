@@ -65,11 +65,21 @@ export const processor: DynamoDBStreamHandler = async (event) => {
 
         const exeuctionName = `${outBoxEvent.aggregateId}-${Date.now()}`;
 
+        // Include trace context in Step Functions input for trace continuity
+        const stepFunctionInput = {
+          ...outBoxEvent.payload,
+          _traceContext: {
+            traceId: outBoxEvent.payload._traceId,
+            parentSegmentId: process.env._X_AMZN_TRACE_ID,
+          },
+        };
+
         await sfnClient.send(
           new StartExecutionCommand({
             stateMachineArn: STATE_MACHINE_ARN,
             name: exeuctionName,
-            input: JSON.stringify(outBoxEvent.payload),
+            input: JSON.stringify(stepFunctionInput),
+            traceHeader: outBoxEvent.payload._traceId, // Propagate X-Ray trace
           }),
         );
 

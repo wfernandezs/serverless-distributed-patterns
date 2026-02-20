@@ -15,6 +15,8 @@ const ORDERS_TABLE = process.env.ORDERS_TABLE!;
 const OUTBOX_TABLE = process.env.OUTBOX_TABLE!;
 
 const createOrderInternal: APIGatewayProxyHandler = async (event) => {
+  const executionTimestamp = Date.now();
+
   try {
     // 1. Parse and validate input
     const body = JSON.parse(event.body || "{}");
@@ -46,6 +48,9 @@ const createOrderInternal: APIGatewayProxyHandler = async (event) => {
       updatedAt: new Date().toISOString(),
     };
 
+    // Get current trace ID
+    const traceId = process.env._X_AMZN_TRACE_ID || "";
+
     const outBoxEvent: OutboxEvent = {
       eventId: uuidbv4(),
       aggregateId: orderId,
@@ -56,6 +61,7 @@ const createOrderInternal: APIGatewayProxyHandler = async (event) => {
         items,
         totalAmount,
         timestamp: new Date().toISOString(),
+        _traceId: traceId,
       },
       createdAt: order.createdAt,
       processed: false,
@@ -65,7 +71,11 @@ const createOrderInternal: APIGatewayProxyHandler = async (event) => {
     addTraceContext(
       tracer,
       { orderId, customerId },
-      { totalAmount, itemCount: items.length, eventType: EventType.ORDER_CREATED },
+      {
+        totalAmount,
+        itemCount: items.length,
+        eventType: EventType.ORDER_CREATED,
+      },
     );
 
     // 3. Save order and outbox event in a transaction
@@ -95,10 +105,14 @@ const createOrderInternal: APIGatewayProxyHandler = async (event) => {
       status: order.status,
       totalAmount,
       message: "Order created successfully",
+      executedAt: executionTimestamp, // Include execution timestamp
     };
 
     return {
       statusCode: 201,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(response),
     };
   } catch (error) {

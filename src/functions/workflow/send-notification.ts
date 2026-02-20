@@ -15,7 +15,8 @@ export const handler: Handler<
   SendNotificationInput,
   SendNotificationOutput
 > = async (input) => {
-  // Add trace context for distributed tracing
+  // Add trace context
+  const parentTraceId = (input as any)._traceContext?.traceId;
   addTraceContext(
     tracer,
     { orderId: input.orderId, customerId: input.customerId },
@@ -23,6 +24,7 @@ export const handler: Handler<
       paymentId: input.paymentResult.paymentId,
       step: "send-notification",
     },
+    parentTraceId,
   );
 
   logger.info("Sending notification for order", {

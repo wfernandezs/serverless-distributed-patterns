@@ -93,6 +93,8 @@ stepFunctions:
       id: OrderWorkflowStateMachine
       name: ${self:service}-order-workflow-${sls:stage}
       type: EXPRESS
+      tracingConfig:
+        enabled: true
       loggingConfig:
         level: ALL
         includeExecutionData: true

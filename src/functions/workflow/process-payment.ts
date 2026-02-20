@@ -16,7 +16,8 @@ export const handler: Handler<
   ProcessPaymentInput,
   ProcessPaymentOutput
 > = async (input) => {
-  // Add trace context for distributed tracing
+  // Add trace context
+  const parentTraceId = (input as any)._traceContext?.traceId;
   addTraceContext(
     tracer,
     { orderId: input.orderId, customerId: input.customeId },
@@ -25,6 +26,7 @@ export const handler: Handler<
       reservationId: input.reservationResult.reservationId,
       step: "process-payment",
     },
+    parentTraceId,
   );
 
   logger.info("Processing payment for order", {

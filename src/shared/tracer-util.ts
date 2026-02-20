@@ -7,11 +7,13 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
  * @param tracer - The Powertools Tracer instance
  * @param annotations - Key-value pairs for filtering traces (e.g., orderId, customerId)
  * @param metadata - Additional context data for debugging
+ * @param parentTraceId - Optional parent trace ID to link async workflows
  */
 export function addTraceContext(
   tracer: Tracer,
   annotations?: Record<string, string | number>,
   metadata?: Record<string, any>,
+  parentTraceId?: string,
 ): void {
   if (annotations) {
     Object.entries(annotations).forEach(([key, value]) => {
@@ -23,6 +25,11 @@ export function addTraceContext(
     Object.entries(metadata).forEach(([key, value]) => {
       tracer.putMetadata(key, value);
     });
+  }
+
+  // Add parent trace ID to link async workflow steps
+  if (parentTraceId) {
+    tracer.putMetadata("parentTraceId", parentTraceId);
   }
 }
 
