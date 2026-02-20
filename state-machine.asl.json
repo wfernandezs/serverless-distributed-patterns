@@ -1,0 +1,97 @@
+{
+  "Comment": "Order Processing Workflow - Reserve Inventory -> Process Payment -> Send Notification",
+  "StartAt": "ReserveInventory",
+  "States": {
+    "ReserveInventory": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:123456789012:function:distributed-patterns-demo-dev-reserveInventory",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "States.Timeout"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "WorkflowFailed"
+        }
+      ],
+      "ResultPath": "$.reservationResult",
+      "Next": "ProcessPayment"
+    },
+    "ProcessPayment": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:123456789012:function:distributed-patterns-demo-dev-processPayment",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed",
+            "States.Timeout"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "CompensateInventory"
+        }
+      ],
+      "ResultPath": "$.paymentResult",
+      "Next": "SendNotification"
+    },
+    "SendNotification": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:123456789012:function:distributed-patterns-demo-dev-sendNotification",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "WorkflowCompleted"
+        }
+      ],
+      "ResultPath": "$.notificationResult",
+      "Next": "WorkflowCompleted"
+    },
+    "CompensateInventory": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:123456789012:function:distributed-patterns-demo-dev-compensate",
+      "InputPath": "$",
+      "ResultPath": "$.compensationResult",
+      "Next": "WorkflowFailed"
+    },
+    "WorkflowCompleted": {
+      "Type": "Succeed"
+    },
+    "WorkflowFailed": {
+      "Type": "Fail",
+      "Error": "WorkflowExecutionFailed",
+      "Cause": "One or more workflow steps failed"
+    }
+  }
+}

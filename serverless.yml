@@ -4,6 +4,9 @@ provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
+  tracing:
+    lambda: true
+    apiGateway: true
   environment:
     ORDERS_TABLE: ${self:service}-orders-table-${sls:stage}
     OUTBOX_TABLE: ${self:service}-outbox-table-${sls:stage}
@@ -41,19 +44,19 @@ plugins:
 package:
   individually: true
   patterns:
-    - '!.git/**'
-    - '!.gitignore'
-    - '!.vscode/**'
-    - '!.idea/**'
-    - '!README.md'
-    - '!.build/**'
-    - '!pnpm-lock.yaml'
-    - '!package-lock.json'
-    - '!tsconfig.json'
-    - '!**/*.md'
-    - '!**/*.map'
-    - '!**/test/**'
-    - '!**/tests/**'
+    - "!.git/**"
+    - "!.gitignore"
+    - "!.vscode/**"
+    - "!.idea/**"
+    - "!README.md"
+    - "!.build/**"
+    - "!pnpm-lock.yaml"
+    - "!package-lock.json"
+    - "!tsconfig.json"
+    - "!**/*.md"
+    - "!**/*.map"
+    - "!**/test/**"
+    - "!**/tests/**"
 
 functions:
   createOrder:

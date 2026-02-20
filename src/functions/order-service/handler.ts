@@ -6,8 +6,10 @@ import { EventType } from "../../utils/types/events";
 import { makeIdempotentHandler } from "../../shared/idempotent-handler";
 import { docClient } from "../../utils/db/dynamo";
 import { Logger } from "@aws-lambda-powertools/logger";
+import { createTracer, addTraceContext } from "../../shared/tracer-util";
 
 const logger = new Logger({ serviceName: "order-service" });
+const tracer = createTracer("order-service");
 
 const ORDERS_TABLE = process.env.ORDERS_TABLE!;
 const OUTBOX_TABLE = process.env.OUTBOX_TABLE!;
@@ -58,6 +60,13 @@ const createOrderInternal: APIGatewayProxyHandler = async (event) => {
       createdAt: order.createdAt,
       processed: false,
     };
+
+    // Add trace context for distributed tracing
+    addTraceContext(
+      tracer,
+      { orderId, customerId },
+      { totalAmount, itemCount: items.length, eventType: EventType.ORDER_CREATED },
+    );
 
     // 3. Save order and outbox event in a transaction
     await docClient.send(

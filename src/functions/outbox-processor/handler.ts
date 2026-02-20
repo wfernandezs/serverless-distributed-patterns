@@ -6,8 +6,10 @@ import { Logger } from "@aws-lambda-powertools/logger";
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { docClient } from "../../utils/db/dynamo";
+import { createTracer, addTraceContext } from "../../shared/tracer-util";
 
 const logger = new Logger({ serviceName: "OutboxProcessor" });
+const tracer = createTracer("outbox-processor");
 const sfnClient = new SFNClient({});
 
 const OUTBOX_TABLE = process.env.OUTBOX_TABLE!;
@@ -40,6 +42,19 @@ export const processor: DynamoDBStreamHandler = async (event) => {
           eventType: outBoxEvent.eventType,
           aggregateId: outBoxEvent.aggregateId,
         });
+
+        // Add trace context for distributed tracing
+        addTraceContext(
+          tracer,
+          {
+            eventId: outBoxEvent.eventId,
+            orderId: outBoxEvent.aggregateId,
+          },
+          {
+            eventType: outBoxEvent.eventType,
+            step: "outbox-processor",
+          },
+        );
 
         if (outBoxEvent.processed) {
           logger.info("Event already processed, skipping", {

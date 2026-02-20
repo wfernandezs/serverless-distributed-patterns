@@ -7,13 +7,22 @@ import {
 import { OrderStatus } from "../../utils/types/order";
 import { v4 as uuidbv4 } from "uuid";
 import { updateOrderStatus } from "../../utils/db/dynamo";
+import { createTracer, addTraceContext } from "../../shared/tracer-util";
 
 const logger = new Logger({ serviceName: "reserve-inventory" });
+const tracer = createTracer("reserve-inventory");
 
 export const handler: Handler<
   ReserveInventoryInput,
   ReserveInventoryOutput
 > = async (input) => {
+  // Add trace context for distributed tracing
+  addTraceContext(
+    tracer,
+    { orderId: input.orderId, customerId: input.customerId },
+    { itemCount: input.items.length, step: "reserve-inventory" },
+  );
+
   logger.info("Reserving inventory for order", {
     orderId: input.orderId,
     itemCount: input.items.length,

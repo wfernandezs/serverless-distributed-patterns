@@ -7,13 +7,26 @@ import {
   ProcessPaymentOutput,
 } from "../../utils/types/order";
 import { updateOrderStatus } from "../../utils/db/dynamo";
+import { createTracer, addTraceContext } from "../../shared/tracer-util";
 
 const logger = new Logger({ serviceName: "process-payment" });
+const tracer = createTracer("process-payment");
 
 export const handler: Handler<
   ProcessPaymentInput,
   ProcessPaymentOutput
 > = async (input) => {
+  // Add trace context for distributed tracing
+  addTraceContext(
+    tracer,
+    { orderId: input.orderId, customerId: input.customeId },
+    {
+      amount: input.totalAmount,
+      reservationId: input.reservationResult.reservationId,
+      step: "process-payment",
+    },
+  );
+
   logger.info("Processing payment for order", {
     orderId: input.orderId,
     amount: input.totalAmount,

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "export-asl": "sls print --format json | jq '.stepFunctions.stateMachines.orderWorkflow.definition' > state-machine.asl.json",
+    "export-asl": "node scripts/export-asl.js",
     "deploy": "sls deploy",
     "deploy:dev": "sls deploy --stage dev",
     "deploy:prod": "sls deploy --stage prod",
@@ -24,6 +24,7 @@
   "dependencies": {
     "@aws-lambda-powertools/idempotency": "^2.31.0",
     "@aws-lambda-powertools/logger": "^2.31.0",
+    "@aws-lambda-powertools/tracer": "^2.31.0",
     "@aws-sdk/client-dynamodb": "^3.987.0",
     "@aws-sdk/client-eventbridge": "^3.987.0",
     "@aws-sdk/client-sfn": "^3.990.0",

@@ -6,13 +6,25 @@ import {
 } from "../../utils/types/notifications";
 import { OrderStatus } from "../../utils/types/order";
 import { updateOrderStatus } from "../../utils/db/dynamo";
+import { createTracer, addTraceContext } from "../../shared/tracer-util";
 
 const logger = new Logger({ serviceName: "send-notification" });
+const tracer = createTracer("send-notification");
 
 export const handler: Handler<
   SendNotificationInput,
   SendNotificationOutput
 > = async (input) => {
+  // Add trace context for distributed tracing
+  addTraceContext(
+    tracer,
+    { orderId: input.orderId, customerId: input.customerId },
+    {
+      paymentId: input.paymentResult.paymentId,
+      step: "send-notification",
+    },
+  );
+
   logger.info("Sending notification for order", {
     orderId: input.orderId,
     customerId: input.customerId,
